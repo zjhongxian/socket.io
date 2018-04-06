@@ -28,6 +28,14 @@
 
 #define MAX_RECV_BUFFERSIZE 65535
 
+/* IO error codes */
+enum {
+	IO_DONE = 0,        /* operation completed successfully */
+	IO_TIMEOUT = -1,    /* operation timed out */
+	IO_CLOSED = -2,     /* the connection has been closed */
+	IO_UNKNOWN = -3
+};
+
 bool InitSocketSystem();
 void clearSocketSystem();
 
@@ -45,11 +53,11 @@ public:
 	bool Bind(unsigned short nPort);
 	bool Accept(BaseSock& client);
 	void Close();
-	long Send(const char* buf, long buflen);
-	long Recv(char* buf, long buflen);
-	long SendTo(const char* buf, int len,
+	int Send(const char* buf, long buflen);
+	int Recv(char* buf, long buflen);
+	int SendTo(const char* buf, int len,
 		const struct sockaddr_in* toaddr, int tolen);
-	long RecvFrom(char* buf, int len, struct sockaddr_in* fromaddr,
+	int RecvFrom(char* buf, int len, struct sockaddr_in* fromaddr,
 		int* fromlen);
 	bool GetPeerName(std::string& strIP, unsigned short &nPort);
 	SOCKET GetHandle();

@@ -157,37 +157,78 @@ bool BaseSock::Connect(const std::string& host, unsigned short port)
 	return true;
 }
 
-long BaseSock::Send(const char* buf, long buflen)
+int BaseSock::Send(const char* buf, long buflen)
 {
 	//printf("Send: %.*s\r\n",buflen,buf);
 	if (m_sock == -1)
 	{
-		return -1;
+		return IO_CLOSED;
 	}
 
 	int sended = 0;
+	int err;
 	do
 	{
 		int len = send(m_sock, buf + sended, buflen - sended, 0);
 		if (len < 0)
 		{
+#ifdef WIN32
+			/* deal with failure */
+			err = WSAGetLastError();
+			/* we can only proceed if there was no serious error */
+			if (err != WSAEWOULDBLOCK) return err;
+#else
+			err = errno;
+			/* EPIPE means the connection was closed */
+			if (err == EPIPE) return IO_CLOSED;
+			/* we call was interrupted, just try again */
+			if (err == EINTR) continue;
+			/* if failed fatal reason, report error */
+			if (err != EAGAIN) return err;
+#endif
 			break;
 		}
 		sended += len;
 	} while (sended < buflen);
-	return sended;
+
+	return IO_DONE;
 }
 
-long BaseSock::Recv(char* buf, long buflen)
+int BaseSock::Recv(char* buf, long buflen)
 {
 	if (m_sock == -1)
 	{
-		return -1;
+		return IO_CLOSED;
 	}
 
+	int err, prev = IO_DONE;
 	int len = recv(m_sock, buf, buflen, 0);
-	//printf("Recv: %.*s\r\n", len, buf);
-	return len;
+	if (len > 0)
+	{
+		return IO_DONE;
+	}
+#ifdef WIN32
+	if (len == 0) return IO_CLOSED;
+	err = WSAGetLastError();
+	/* On UDP, a connreset simply means the previous send failed.
+	* So we try again.
+	* On TCP, it means our socket is now useless, so the error passes.
+	* (We will loop again, exiting because the same error will happen) */
+	if (err != WSAEWOULDBLOCK) {
+		if (err != WSAECONNRESET || prev == WSAECONNRESET) return err;
+		prev = err;
+	}
+#else
+	err = errno;
+	/* EPIPE means the connection was closed */
+	if (err == EPIPE) return IO_CLOSED;
+	/* we call was interrupted, just try again */
+	if (err == EINTR) continue;
+	/* if failed fatal reason, report error */
+	if (err != EAGAIN) return err;
+#endif
+
+	return err;
 }
 
 bool BaseSock::GetPeerName(std::string& strIP, unsigned short &nPort)
@@ -225,22 +266,22 @@ bool BaseSock::isUDP()
 	return m_UDP;
 }
 
-long BaseSock::SendTo(const char* buf, int len,
+int BaseSock::SendTo(const char* buf, int len,
 	const struct sockaddr_in* toaddr, int tolen)
 {
 	if (m_sock == -1)
 	{
-		return -1;
+		return IO_CLOSED;
 	}
 	return sendto(m_sock, buf, len, 0, (const struct sockaddr*) toaddr, tolen);
 }
 
-long BaseSock::RecvFrom(char* buf, int len, struct sockaddr_in* fromaddr,
+int BaseSock::RecvFrom(char* buf, int len, struct sockaddr_in* fromaddr,
 	int* fromlen)
 {
 	if (m_sock == -1)
 	{
-		return -1;
+		return IO_CLOSED;
 	}
 #ifdef WIN32
 	return recvfrom(m_sock, buf, len, 0, (struct sockaddr*)fromaddr, fromlen);
