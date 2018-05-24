@@ -46,7 +46,7 @@ public:
 public:
 	BaseSock();
 	virtual ~BaseSock();
-	bool Create(bool bUDP = false);
+	bool Create(bool udp = false);
 	bool Connect(const std::string& host, unsigned short port);
 	bool isConnected();
 	bool isUDP();
