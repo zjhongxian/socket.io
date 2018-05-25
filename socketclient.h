@@ -2,12 +2,14 @@
 #define  __SOCKET_CLIENT_H__
 
 #include <string>
+#include <queue>
 
 class BaseSock;
 namespace std
 {
 	class thread;
 	class mutex;
+	class condition_variable;
 }
 
 class SocketClient
@@ -43,6 +45,7 @@ protected:
 
 	std::queue<PacketSender>* m_SendQueue;
 	std::mutex* m_SendMutex;
+	std::condition_variable* m_SendCondition;
 
 	bool m_Abort;
 

@@ -1,9 +1,19 @@
 #include "socketclient.h"
 #include <thread>
-#include <queue>
 #include <mutex>
 
+#if defined(_ALLBSD_SOURCE) || defined(__APPLE__)
+#include <machine/endian.h>
+#elif defined(__linux__) || defined(__CYGWIN__)
+#include <endian.h>
+#endif
+
 #include "basesock.h"
+
+#define SAFE_DELETE(p) do { delete (p); (p) = nullptr; } while (0)
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define IS_LITTLE_ENDIAN
+#endif
 
 const int SocketClient::BUFFER_SIZE = 8192;
 
@@ -12,8 +22,6 @@ const int SocketClient::PACKET_LEN_SIZE = sizeof(PacketLenType);
 const int SocketClient::PACKET_ID_SIZE = sizeof(PacketIDType);
 
 const int SocketClient::PACKET_HEADER_SIZE = PACKET_LEN_SIZE + PACKET_ID_SIZE;
-
-#define SAFE_DELETE(p) do { delete (p); (p) = nullptr; } while (0)
 
 SocketClient::SocketClient()
 	: m_Connection(nullptr)
@@ -25,14 +33,16 @@ SocketClient::SocketClient()
 {
 	m_SendQueue = new std::queue<PacketSender>();
 	m_SendMutex = new std::mutex();
+	m_SendCondition = new std::condition_variable();
 }
 
 SocketClient::~SocketClient()
 {
 	Disconnect();
 
-	SAFE_DELETE(m_SendQueue);
+	SAFE_DELETE(m_SendCondition);
 	SAFE_DELETE(m_SendMutex);
+	SAFE_DELETE(m_SendQueue);
 }
 
 void SocketClient::CreateConnection(const std::string& host, unsigned short port)
@@ -84,6 +94,7 @@ void SocketClient::SendMessageToServer(PacketIDType packetId, const char* buff, 
 	{
 		std::unique_lock<std::mutex> lock(*m_SendMutex);
 		m_SendQueue->push(sender);
+		m_SendCondition->notify_one();
 	}
 }
 
@@ -119,5 +130,55 @@ void SocketClient::ThreadReceive()
 
 void SocketClient::ThreadSend()
 {
+	int buffSize = BUFFER_SIZE;
+	char* buffer = new char[buffSize];
 
+	while (!m_Abort)
+	{
+		PacketSender packetSender;
+		{
+			std::unique_lock<std::mutex> lock(*m_SendMutex);
+			if (m_SendQueue->empty())
+			{
+				m_SendCondition->wait(lock);
+			}
+
+			if (m_SendQueue->empty())
+			{
+				continue;
+			}
+
+			packetSender = m_SendQueue->front();
+			m_SendQueue->pop();
+		}
+
+		PacketIDType packetId = packetSender.packetId;
+		const char* data = packetSender.buff;
+		
+		int messageLen = packetSender.buffLen;
+		PacketLenType packetSize = messageLen + PACKET_HEADER_SIZE;
+		if (packetSize > buffSize)
+		{
+			delete[] buffer;
+			for (; buffSize < packetSize; buffSize <<= 1)
+			{
+			}
+			buffer = new char[buffSize];
+		}
+#ifndef IS_LITTLE_ENDIAN
+		packetSize = htobe16(packetSize);
+		packetId = htobe16(packetId);
+#endif
+		memcpy_s(buffer, buffSize, &packetSize, PACKET_LEN_SIZE);
+		buffer += PACKET_LEN_SIZE;
+		memcpy_s(buffer, buffSize - PACKET_LEN_SIZE, &packetId, PACKET_ID_SIZE);
+		buffer += PACKET_ID_SIZE;
+		memcpy_s(buffer, buffSize - PACKET_HEADER_SIZE, packetSender.buff, messageLen);
+
+		if (m_Connection->Send(buffer, packetSize) != 0)
+		{
+			m_ConnectState = Failed;
+			break;
+		}
+	}
 }
