@@ -165,11 +165,12 @@ void SocketClient::ThreadSend()
 			}
 			buffer = new char[buffSize];
 		}
+		PacketLenType packetSizeBytes = packetSize;
 #ifndef IS_LITTLE_ENDIAN
-		packetSize = htobe16(packetSize);
+		packetSizeBytes = htobe16(packetSize);
 		packetId = htobe16(packetId);
 #endif
-		memcpy_s(buffer, buffSize, &packetSize, PACKET_LEN_SIZE);
+		memcpy_s(buffer, buffSize, &packetSizeBytes, PACKET_LEN_SIZE);
 		buffer += PACKET_LEN_SIZE;
 		memcpy_s(buffer, buffSize - PACKET_LEN_SIZE, &packetId, PACKET_ID_SIZE);
 		buffer += PACKET_ID_SIZE;
