@@ -125,7 +125,20 @@ void SocketClient::ThreadConnect(const std::string& host, unsigned short port)
 
 void SocketClient::ThreadReceive()
 {
+	int buffSize = BUFFER_SIZE;
+	char* buffer = new char[buffSize];
 
+	int contentSize = 0;
+
+	while (!m_Abort)
+	{
+		size_t recvSize;
+		auto recvRet = m_Connection->Recv(buffer, buffSize, &recvSize);
+		if (recvRet == IO_DONE)
+		{
+
+		}
+	}
 }
 
 void SocketClient::ThreadSend()
@@ -176,7 +189,7 @@ void SocketClient::ThreadSend()
 		buffer += PACKET_ID_SIZE;
 		memcpy_s(buffer, buffSize - PACKET_HEADER_SIZE, packetSender.buff, messageLen);
 
-		if (m_Connection->Send(buffer, packetSize) != 0)
+		if (m_Connection->Send(buffer, packetSize) != IO_DONE)
 		{
 			m_ConnectState = Failed;
 			break;
