@@ -194,7 +194,7 @@ int BaseSock::Send(const char* buf, long buflen)
 	return IO_DONE;
 }
 
-int BaseSock::Recv(char* buf, long buflen)
+int BaseSock::Recv(char* buf, long buflen, size_t *got)
 {
 	if (m_sock == -1)
 	{
@@ -202,30 +202,27 @@ int BaseSock::Recv(char* buf, long buflen)
 	}
 
 	int err, prev = IO_DONE;
+	
+	*got = 0;
 	int len = recv(m_sock, buf, buflen, 0);
 	if (len > 0)
 	{
+		*got = len;
 		return IO_DONE;
 	}
 #ifdef WIN32
 	if (len == 0) return IO_CLOSED;
 	err = WSAGetLastError();
-	/* On UDP, a connreset simply means the previous send failed.
-	* So we try again.
-	* On TCP, it means our socket is now useless, so the error passes.
-	* (We will loop again, exiting because the same error will happen) */
-	if (err != WSAEWOULDBLOCK) {
-		if (err != WSAECONNRESET || prev == WSAECONNRESET) return err;
-		prev = err;
+	if (err == WSAEWOULDBLOCK)
+	{
+		return IO_DONE;
 	}
 #else
 	err = errno;
 	/* EPIPE means the connection was closed */
 	if (err == EPIPE) return IO_CLOSED;
 	/* we call was interrupted, just try again */
-	if (err == EINTR) continue;
-	/* if failed fatal reason, report error */
-	if (err != EAGAIN) return err;
+	if (err == EINTR  || EAGAIN) IO_DONE;
 #endif
 
 	return err;

@@ -54,7 +54,7 @@ public:
 	bool Accept(BaseSock& client);
 	void Close();
 	int Send(const char* buf, long buflen);
-	int Recv(char* buf, long buflen);
+	int Recv(char* buf, long buflen, size_t *got);
 	int SendTo(const char* buf, int len,
 		const struct sockaddr_in* toaddr, int tolen);
 	int RecvFrom(char* buf, int len, struct sockaddr_in* fromaddr,
